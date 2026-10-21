@@ -1,0 +1,55 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Localizar proyecto (descomprime el .zip si existe)
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -n1 || true)
+          if [ -n "$ZIP" ]; then
+            echo "Descomprimiendo $ZIP"
+            mkdir -p _proj && unzip -q -o "$ZIP" -d _proj
+            SEARCH=_proj
+          else
+            SEARCH=.
+          fi
+          SETTINGS=$(find "$SEARCH" -name settings.gradle.kts -not -path '*/node_modules/*' | head -n1)
+          if [ -z "$SETTINGS" ]; then echo "No encontré settings.gradle.kts"; exit 1; fi
+          PROJ=$(dirname "$SETTINGS")
+          echo "Proyecto en: $PROJ"
+          echo "PROJ_DIR=$PROJ" >> "$GITHUB_ENV"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compilar APK
+        working-directory: ${{ env.PROJ_DIR }}
+        run: gradle assembleDebug
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cruceta-BT-APK
+          path: ${{ env.PROJ_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
